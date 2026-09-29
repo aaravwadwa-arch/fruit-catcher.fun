@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ultimate Fruit Catcher Mobile</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body {
+            margin: 0;
+            background: #120626;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+            color: white;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            max-width: 600px;
+            height: 80vh;
+            max-height: 500px;
+            background: linear-gradient(180deg, #1d0b3a 0%, #0d031a 100%);
+            border: 3px solid #ff007f;
+            border-radius: 12px;
+            overflow: hidden;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 16px;
+            font-weight: bold;
+            pointer-events: none;
+        }
+        .stat {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 6px 12px;
+            border-radius: 15px;
+            border: 1px solid #00f3ff;
+        }
+        #screen-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(13, 3, 26, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            padding: 20px;
+            text-align: center;
+        }
+        .btn {
+            background: linear-gradient(45deg, #ff007f, #7f00ff);
+            color: white;
+            border: none;
+            padding: 14px 35px;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: transform 0.1s;
+            margin-top: 15px;
+        }
+        .btn:active {
+            transform: scale(0.95);
+        }
+        h1 {
+            font-size: 28px;
+            margin: 0 0 10px 0;
+            color: #ff007f;
+        }
+        p {
+            color: #b3a2c7;
+            margin: 0 0 15px 0;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- Live Scores -->
+        <div id="ui-layer">
+            <div class="stat" id="score-disp">Score: 0</div>
+            <div class="stat" id="highscore-disp" style="border-color: #ff007f;">High: 0</div>
+            <div class="stat" id="lives-disp" style="border-color: #ffbb00;">Lives: ❤️❤️❤️</div>
+        </div>
+
+        <!-- Start/Game Over Screens -->
+        <div id="screen-overlay">
+            <h2 id="screen-title" style="font-size: 32px; margin: 0; color: #00f3ff;">Fruit Catcher</h2>
+            <p id="screen-desc">Slide your finger anywhere to move the basket!</p>
+            <button class="btn" id="action-btn">Start Game</button>
+        </div>
+
+        <!-- Render View -->
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const overlay = document.getElementById('screen-overlay');
+        const screenTitle = document.getElementById('screen-title');
+        const screenDesc = document.getElementById('screen-desc');
+        const actionBtn = document.getElementById('action-btn');
+
+        // Automatic Resize logic for mobile phone screens
+        function resize() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+            basket.y = canvas.height - 60;
+        }
+
+        // Game Tracking Data
+        let score = 0;
+        let highScore = localStorage.getItem('phone_catcher_highscore') || 0;
+        let lives = 3;
+        let gameState = 'start'; // start, playing, gameover
+        let items = [];
+        let baseSpeed = 3.5;
+        let lastItemTime = 0;
+
+        // Mobile Woven Basket Dimensions
+        const basket = {
+            x: 0,
+            y: 0,
+            width: 90,
+            height: 35
+        };
+
+        document.getElementById('highscore-disp').innerText = `High: ${highScore}`;
+
+        // Highly-Optimized Mobile Input Handling (Lag Free)
+        function handleTouch(e) {
+            if (gameState !== 'playing') return;
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            // Map touch coordinate and center the basket perfectly on the finger
+            const touchX = ((touch.clientX - rect.left) / rect.width) * canvas.width;
+            basket.x = touchX - (basket.width / 2);
+
+            // Stay within display boundaries
+            if (basket.x < 0) basket.x = 0;
+            if (basket.x > canvas.width - basket.width) basket.x = canvas.width - basket.width;
+        }
+
+        canvas.addEventListener('touchstart', handleTouch, { passive: false });
+        canvas.addEventListener('touchmove', handleTouch, { passive: false });
+
+        actionBtn.addEventListener('click', () => {
+            resetGame();
+            gameState = 'playing';
+            overlay.style.display = 'none';
+        });
+
+        function resetGame() {
+            score = 0;
+            lives = 3;
+            items = [];
+            baseSpeed = 3.5;
+            resize();
+            basket.x = (canvas.width / 2) - (basket.width / 2);
+            updateUI();
+        }
+
+        function updateUI() {
+            document.getElementById('score-disp').innerText = `Score: ${score}`;
+            document.getElementById('lives-disp').innerText = `Lives: ${'❤️'.repeat(lives)}`;
+        }
+
+        // Lightweight Basket Draw Routine
+        function drawBasket() {
+            ctx.fillStyle = '#8b5226'; // Deep brown body
+            ctx.beginPath();
+            ctx.roundRect(basket.x, basket.y, basket.width, basket.height, [0, 0, 15, 15]);
+            ctx.fill();
+
+            ctx.fillStyle = '#6e3c1a'; // Thick rim accent
+            ctx.beginPath();
+            ctx.roundRect(basket.x - 4, basket.y, basket.width + 8, 8, 4);
+            ctx.fill();
+
+            // Simple line paths for a clean basket look without laggy textures
+            ctx.strokeStyle = '#522d12';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(basket.x + (basket.width * 0.25), basket.y + 8);
+            ctx.lineTo(basket.x + (basket.width * 0.25), basket.y + basket.height);
+            ctx.moveTo(basket.x + (basket.width * 0.5), basket.y + 8);
+            ctx.lineTo(basket.x + (basket.width * 0.5), basket.y + basket.height);
+            ctx.moveTo(basket.x + (basket.width * 0.75), basket.y + 8);
+            ctx.lineTo(basket.x + (basket.width * 0.75), basket.y + basket.height);
+            ctx.stroke();
+        }
+
+        function spawnItem() {
+            const types = [
+                { name: 'apple', points: 10, weight: 60, symbol: '🍎' },
+                { name: 'banana', points: 15, weight: 20, symbol: '🍌' },
+                { name: 'golden', points: 50, weight: 5, symbol: '👑' },
+                { name: 'bomb', points: 0, weight: 15, symbol: '💣' }
+            ];
+
+            let rand = Math.random() * 100;
+            let selectedType = types[0];
+            let sum = 0;
+            for (let t of types) {
+                sum += t.weight;
+                if (rand <= sum) { selectedType = t; break; }
+            }
+
+            items.push({
+                x: Math.random() * (canvas.width - 40) + 20,
+                y: -20,
+                radius: 15,
+                ...selectedType,
+                speed: baseSpeed + (score * 0.03) // Dynamic acceleration
+            });
+        }
+
+        // Clean Loop System
+        function gameLoop(timestamp) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (gameState === 'playing') {
+                if (timestamp - lastItemTime > Math.max(600, 1300 - score * 8)) {
+                    spawnItem();
+                    lastItemTime = timestamp;
+                }
+
+                for (let i = items.length - 1; i >= 0; i--) {
+                    let item = items[i];
+                    item.y += item.speed;
+
+                    // Text-based emojis don't drain phone battery or freeze memory
+                    ctx.font = "24px Arial";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(item.symbol, item.x, item.y);
+
+                    // Touch boundary intersections
+                    if (item.y + 12 >= basket.y && item.y - 12 <= basket.y + basket.height &&
+                        item.x >= basket.x && item.x <= basket.x + basket.width) {
+                        
+                        if (item.name === 'bomb') {
+                            lives--;
+                            if (lives <= 0) endGame("💥 BOMB EXTRACTION! 💥");
+                        } else {
+                            score += item.points;
+                        }
+                        updateUI();
+                        items.splice(i, 1);
+                        continue;
+                    }
+
+                    if (item.y > canvas.height + 20) {
+                        if (item.name !== 'bomb' && item.name !== 'golden') {
+                            lives--;
+  
